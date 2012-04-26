@@ -19,7 +19,9 @@ run-tests.php
 .deps
 .libs
 libtool
-Makefile*
+Makefile
+Makefile.fragments
+Makefile.objects
 modules
 ltmain.sh
 *.la
