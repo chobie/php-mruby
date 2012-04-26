@@ -17,6 +17,7 @@ if test $PHP_MRUBY != "no"; then
 
 	PHP_NEW_EXTENSION(mruby,
 		php_mruby.c \
+		mruby.c \
 		, $ext_shared)
 		
 fi
