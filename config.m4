@@ -50,8 +50,8 @@ mruby/src/vm.c
 mruby/src/y.tab.c
 mruby/mrblib/mrblib.c
 "
-	PHP_NEW_EXTENSION(mruby, php_mruby.c mruby.c $MRUBY_SOURCES, $ext_shared)
-	PHP_SUBST(MRUBY_SHARED_LIBADD)
+    PHP_NEW_EXTENSION(mruby, php_mruby.c mruby.c $MRUBY_SOURCES, $ext_shared)
+    PHP_SUBST(MRUBY_SHARED_LIBADD)
 
     PHP_ADD_BUILD_DIR([$ext_builddir/mruby])
 
