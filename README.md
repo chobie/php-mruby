@@ -36,3 +36,52 @@ $mruby->run('puts "Hello World"');
 # License
 
 PHP License
+
+
+# Documents
+
+## \Mruby::__construct()
+
+### *Description*
+
+create a mruby instance.
+
+### *Parameters*
+
+### *Return Value*
+
+*Mruby*: mruby instance
+
+### *Example*
+
+````php
+<?php
+$mrb = new Mruby();
+````
+
+## \Mruby::run(string $code)
+
+### *Description*
+
+run ruby code with current instance
+
+### *Parameters*
+
+*code*: ruby code
+
+### *Return Value*
+
+*void*:
+
+### *Example*
+
+````php
+<?php
+$mrb = new Mruby();
+$mrb->run('puts "Hello World"');
+````
+
+# Contributors
+
+* Moriyoshi Koizumi
+* Shuhei Tanuma
