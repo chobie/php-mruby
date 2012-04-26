@@ -21,17 +21,56 @@
 void php_mruby_init(TSRMLS_D);
 zend_class_entry *mruby_class_entry;
 
+static void php_mruby_free_storage(php_mruby_t *obj TSRMLS_DC)
+{
+	zend_object_std_dtor(&obj->zo TSRMLS_CC);
+	if (obj->mrb != NULL) {
+		mrb_close(obj->mrb);
+		obj->mrb = NULL;
+	}
+	efree(obj);
+}
+
+zend_object_value php_mruby_new(zend_class_entry *ce TSRMLS_DC)
+{
+	zend_object_value retval;
+	php_mruby_t *obj;
+	zval *tmp;
+
+	obj = ecalloc(1, sizeof(*obj));
+	zend_object_std_init( &obj->zo, ce TSRMLS_CC );
+#if ZEND_MODULE_API_NO >= 20100525
+	object_properties_init(&(obj->zo), ce); 
+#else
+	zend_hash_copy(obj->zo.properties, &ce->default_properties, (copy_ctor_func_t) zval_add_ref, (void *) &tmp, sizeof(zval *));
+#endif
+
+	obj->mrb = mrb_open();
+
+	retval.handle = zend_objects_store_put(obj, 
+		(zend_objects_store_dtor_t)zend_objects_destroy_object,
+		(zend_objects_free_object_storage_t)php_mruby_free_storage,
+		NULL TSRMLS_CC);
+	retval.handlers = zend_get_std_object_handlers();
+	return retval;
+}
+
+
 ZEND_BEGIN_ARG_INFO_EX(arginfo_mruby_run, 0, 0, 1)
 	ZEND_ARG_INFO(0, code)
 ZEND_END_ARG_INFO()
 
 PHP_METHOD(mruby, run)
 {
-	mrb_state *mrb = mrb_open();
+	mrb_state *mrb;
 	struct mrb_parser_state *p;
+	php_mruby_t *object = NULL;
 	int n = -1;
 	char *code;
 	long code_len = 0;
+	
+	object = (php_mruby_t *) zend_object_store_get_object(getThis() TSRMLS_CC);
+	mrb = object->mrb;
 
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC,"s",&code, &code_len) == FAILURE) {
 		return;
@@ -45,7 +84,6 @@ PHP_METHOD(mruby, run)
 	if (mrb->exc) {
 		mrb_p(mrb, mrb_obj_value(mrb->exc));
 	}
-
 }
 
 static zend_function_entry php_mruby_methods[] = {
@@ -59,4 +97,5 @@ void php_mruby_init(TSRMLS_D)
 
 	INIT_CLASS_ENTRY(ce, "MRuby", php_mruby_methods);
 	mruby_class_entry = zend_register_internal_class(&ce TSRMLS_CC);
+	mruby_class_entry->create_object = php_mruby_new;
 }

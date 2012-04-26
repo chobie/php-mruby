@@ -26,4 +26,10 @@ extern zend_module_entry mruby_module_entry;
 
 extern zend_class_entry *mruby_class_entry;
 
+typedef struct{
+	zend_object zo;
+	mrb_state *mrb;
+} php_mruby_t;
+
+
 #endif /* PHP_MRUBY_H */
