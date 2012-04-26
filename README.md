@@ -1,5 +1,10 @@
 # php-mruby
 
+php-mruby is just simple wrapper of <https://github.com/mruby/mruby>.
+
+[![Build Status](https://secure.travis-ci.org/chobie/php-mruby.png)](http://travis-ci.org/chobie/php-mruby)
+
+
 # Experimental
 
 # Install
