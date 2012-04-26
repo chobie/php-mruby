@@ -17,9 +17,51 @@
  */
 
 #include "php_mruby.h"
+#include "mruby/string.h"
 
 void php_mruby_init(TSRMLS_D);
 zend_class_entry *mruby_class_entry;
+
+
+static mrb_value phplib_echo(mrb_state *mrb, mrb_value self)
+{
+	mrb_value argv;
+	mrb_get_args(mrb, "o", &argv);
+
+	/* todo: support other types */
+	if (mrb_type(argv) == MRB_TT_STRING) {
+		struct RString *str;
+		char *s;
+		
+		str = mrb_str_ptr(argv);
+		s = str->buf;
+		php_printf("%s", s);
+	} else {
+		TSRMLS_FETCH();
+		_php_error_log(0, "PHP::echo only support MRB_TT_STRING\n", NULL, NULL TSRMLS_CC);
+		/*
+			MRB_TT_FIXNUM
+			MRB_TT_FLOAT
+			MRB_TT_ARRAY
+			MRB_TT_MODULE
+			MRB_TT_CLASS
+			MRB_TT_ICLASS
+			
+		*/
+	}
+	
+	return argv;
+}
+
+static void phplib_initialize(mrb_state *mrb)
+{
+	struct RClass *phplib;
+
+	phplib = mrb_define_module(mrb, "PHP");
+	mrb_define_class_method(mrb,phplib,"echo",phplib_echo,ARGS_REQ(1));
+}
+
+
 
 static void php_mruby_free_storage(php_mruby_t *obj TSRMLS_DC)
 {
@@ -46,6 +88,7 @@ zend_object_value php_mruby_new(zend_class_entry *ce TSRMLS_DC)
 #endif
 
 	obj->mrb = mrb_open();
+	phplib_initialize(obj->mrb);
 
 	retval.handle = zend_objects_store_put(obj, 
 		(zend_objects_store_dtor_t)zend_objects_destroy_object,
@@ -59,6 +102,7 @@ zend_object_value php_mruby_new(zend_class_entry *ce TSRMLS_DC)
 ZEND_BEGIN_ARG_INFO_EX(arginfo_mruby_run, 0, 0, 1)
 	ZEND_ARG_INFO(0, code)
 ZEND_END_ARG_INFO()
+
 
 PHP_METHOD(mruby, run)
 {
@@ -75,7 +119,6 @@ PHP_METHOD(mruby, run)
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC,"s",&code, &code_len) == FAILURE) {
 		return;
 	}
-
 
 	p = mrb_parse_string(mrb, code);
 	n = mrb_generate_code(mrb, p->tree);
