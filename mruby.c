@@ -18,10 +18,15 @@
 
 #include "php_mruby.h"
 #include "mruby/string.h"
+#include "mruby/khash.h"
 #include "mruby/hash.h"
+#include "mruby/array.h"
 
 void php_mruby_init(TSRMLS_D);
 zend_class_entry *mruby_class_entry;
+
+/* are we need this here? */
+KHASH_INIT(ht, mrb_value, mrb_value, 1, mrb_hash_ht_hash_func, mrb_hash_ht_hash_equal);
 
 static int php_mruby_call_user_function_v(HashTable *function_table, zval **object_pp, zval *function_name, zval *retval_ptr, zend_uint param_count, ...)
 {
@@ -118,6 +123,64 @@ int php_mruby_convert_mrb_value(zval **result, mrb_state *mrb, mrb_value argv TS
 		}
 		case MRB_TT_FLOAT: {
 			ZVAL_DOUBLE(tmp, (double)argv.value.f);
+			break;
+		}
+		case MRB_TT_ARRAY: {
+			struct RArray *array_ptr;
+			HashTable *hash;
+			char key[25];
+			int i = 0;
+			int length = RARRAY_LEN(argv);
+
+			array_ptr = mrb_ary_ptr(argv);
+			array_init(tmp);
+			hash = Z_ARRVAL_P(tmp);
+			//zend_hash_init(hash, length, NULL, ZVAL_PTR_DTOR, 0);
+			
+			for (i = 0; i < length; i++) {
+				zval *z_val;
+				php_mruby_convert_mrb_value(&z_val,mrb, array_ptr->buf[i] TSRMLS_CC);
+
+				//sprintf(key,"%d",i);
+				//zend_hash_add(hash,key, strlen(key)+1,(void **)&z_val,sizeof(z_val),NULL);
+				add_next_index_zval(tmp,z_val);
+			}
+			
+			Z_ARRVAL_P(tmp) = hash;
+			break;
+		}
+		case MRB_TT_HASH: {
+			struct kh_ht *h = RHASH_H_TBL(argv);
+			khiter_t k;
+			HashTable *hash;
+			int length = RHASH_SIZE(argv);
+
+			array_init(tmp);
+			hash = Z_ARRVAL_P(tmp);
+
+			for (k = kh_begin(h); k != kh_end(h); k++) {
+				mrb_value hash_key,hash_value;
+				zval *z_hash_key, *z_hash_val;
+
+				if (!kh_exist(h, k)) {
+					continue;
+				}
+				if(php_mruby_convert_mrb_value(&z_hash_key,mrb, kh_key(h,k) TSRMLS_CC) == FAILURE) {
+					/* for now. */
+					continue;
+				}
+				
+				php_mruby_convert_mrb_value(&z_hash_val,mrb, kh_value(h,k) TSRMLS_CC);
+				
+				if (Z_TYPE_P(z_hash_key) != IS_STRING) {
+					convert_to_string(z_hash_key);
+				}
+				
+				zend_hash_add(hash,Z_STRVAL_P(z_hash_key), Z_STRLEN_P(z_hash_key)+1,(void **)&z_hash_val,sizeof(z_hash_val),NULL);
+				zval_ptr_dtor(&z_hash_key);
+			}
+			
+			Z_ARRVAL_P(tmp) = hash;
 			break;
 		}
 		default: {
