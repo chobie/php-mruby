@@ -332,7 +332,8 @@ static mrb_value phplib_var_dump(mrb_state *mrb, mrb_value self)
 	}
 
 	MAKE_STD_ZVAL(result);
-	ZVAL_STRING(z_func_name,"var_dump",0);
+	MAKE_STD_ZVAL(z_func_name);
+	ZVAL_STRING(z_func_name,"var_dump",1);
 	ret = call_user_function(&EG(symbol_table), NULL, z_func_name, result, argc, params TSRMLS_CC);
 
 	if (argc > 0) {
