@@ -116,6 +116,12 @@ PHP::echo string
 
     PHP::echo "Hello World"
 
+PHP::var_dump args...
+  the var_dump
+
+    PHP::var_dump 1, 2, 3, "Hello", [4,5,6]
+
+
 PHP::call_user_func func_name args
   call php function.
 
