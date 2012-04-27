@@ -184,9 +184,14 @@ int php_mruby_convert_mrb_value(zval **result, mrb_state *mrb, mrb_value argv TS
 			break;
 		}
 		default: {
-			fprintf(stderr,"php_mruby_convert_mrb_value does not support %s\n",mrb_obj_classname(mrb,argv));
-			zval_ptr_dtor(&tmp);
-			retval = FAILURE;
+			if (strcmp("NilClass",mrb_obj_classname(mrb,argv)) == 0) {
+				zval_ptr_dtor(&tmp);
+				ZVAL_NULL(tmp);
+			} else {
+				fprintf(stderr,"php_mruby_convert_mrb_value does not support %s\n",mrb_obj_classname(mrb,argv));
+				zval_ptr_dtor(&tmp);
+				retval = FAILURE;
+			}
 			break;
 		}
 	}
@@ -363,6 +368,10 @@ ZEND_BEGIN_ARG_INFO_EX(arginfo_mruby_run, 0, 0, 1)
 	ZEND_ARG_INFO(0, code)
 ZEND_END_ARG_INFO()
 
+ZEND_BEGIN_ARG_INFO_EX(arginfo_mruby_evaluate_script, 0, 0, 1)
+	ZEND_ARG_INFO(0, script)
+ZEND_END_ARG_INFO()
+
 
 PHP_METHOD(mruby, assign)
 {
@@ -407,16 +416,54 @@ PHP_METHOD(mruby, run)
 
 	p = mrb_parse_string(mrb, code);
 	n = mrb_generate_code(mrb, p->tree);
-	mrb_run(mrb, mrb_proc_new(mrb, mrb->irep[n]), mrb_top_self(mrb));
+
+	if (n >= 0) {
+		mrb_run(mrb, mrb_proc_new(mrb, mrb->irep[n]), mrb_top_self(mrb));
+	}
 
 	if (mrb->exc) {
 		mrb_p(mrb, mrb_obj_value(mrb->exc));
 	}
 }
 
+/* currently, this method does not return correct result */
+PHP_METHOD(mruby, evaluateScript)
+{
+	mrb_state *mrb;
+	struct mrb_parser_state *p;
+	php_mruby_t *object = NULL;
+	zval *z_result;
+	mrb_value result;
+	int n = -1;
+	char *code;
+	long code_len = 0;
+	
+	object = (php_mruby_t *) zend_object_store_get_object(getThis() TSRMLS_CC);
+	mrb = object->mrb;
+
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC,"s",&code, &code_len) == FAILURE) {
+		return;
+	}
+
+	p = mrb_parse_string(mrb, code);
+	n = mrb_generate_code(mrb, p->tree);
+	if (n >= 0) {
+		result = mrb_run(mrb, mrb_proc_new(mrb, mrb->irep[n]), mrb_nil_value());
+	}
+	
+	if (mrb->exc) {
+		mrb_p(mrb, mrb_obj_value(mrb->exc));
+	}
+
+	php_mruby_convert_mrb_value(&z_result, mrb, result TSRMLS_CC);
+	
+	RETVAL_ZVAL(z_result,0,0);
+}
+
 static zend_function_entry php_mruby_methods[] = {
 	PHP_ME(mruby, assign, arginfo_mruby_assign, ZEND_ACC_PUBLIC)
 	PHP_ME(mruby, run, arginfo_mruby_run, ZEND_ACC_PUBLIC)
+	PHP_ME(mruby, evaluateScript, arginfo_mruby_evaluate_script, ZEND_ACC_PUBLIC)
 	{NULL, NULL, NULL}
 };
 
