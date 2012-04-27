@@ -22,34 +22,72 @@
 void php_mruby_init(TSRMLS_D);
 zend_class_entry *mruby_class_entry;
 
+int php_mruby_convert_mrb_value(zval **result, mrb_state *mrb, mrb_value argv TSRMLS_DC)
+{
+	int retval = SUCCESS;
+	zval *tmp;
+	MAKE_STD_ZVAL(tmp);
+	
+	switch (mrb_type(argv)) {
+		case MRB_TT_STRING: {
+			struct RString *str;
+			str = mrb_str_ptr(argv);
+			ZVAL_STRING(tmp, str->buf,1);
+			break;
+		}
+		case MRB_TT_FIXNUM: {
+			ZVAL_LONG(tmp, (long)argv.value.i);
+			break;
+		}
+		case MRB_TT_FLOAT: {
+			ZVAL_DOUBLE(tmp, (double)argv.value.f);
+			break;
+		}
+		default: {
+			fprintf(stderr,"php_mruby_convert_mrb_value does not support %s\n",mrb_obj_classname(mrb,argv));
+			zval_ptr_dtor(&tmp);
+			retval = FAILURE;
+			break;
+		}
+	}
+	
+	if (retval == SUCCESS) {
+		*result = tmp;
+	}
+
+	return retval;
+}
 
 static mrb_value phplib_echo(mrb_state *mrb, mrb_value self)
 {
+	TSRMLS_FETCH();
+	
 	mrb_value argv;
 	mrb_get_args(mrb, "o", &argv);
 
-	/* todo: support other types */
-	if (mrb_type(argv) == MRB_TT_STRING) {
-		struct RString *str;
-		char *s;
-		
-		str = mrb_str_ptr(argv);
-		s = str->buf;
-		php_printf("%s", s);
-	} else {
-		TSRMLS_FETCH();
-		_php_error_log(0, "PHP::echo only support MRB_TT_STRING\n", NULL, NULL TSRMLS_CC);
-		/*
-			MRB_TT_FIXNUM
-			MRB_TT_FLOAT
-			MRB_TT_ARRAY
-			MRB_TT_MODULE
-			MRB_TT_CLASS
-			MRB_TT_ICLASS
-			
-		*/
+	/* should we don't convert mrb_value to zval? */
+	switch (mrb_type(argv)) {
+		case MRB_TT_FLOAT:
+		case MRB_TT_FIXNUM:
+		case MRB_TT_STRING:
+		{
+			zval *tmp;
+			if (php_mruby_convert_mrb_value(&tmp, mrb, argv TSRMLS_CC) == SUCCESS) {
+				if (Z_TYPE_P(tmp) != IS_STRING) {
+					convert_to_string(tmp);
+				}
+				
+				php_printf("%s",Z_STRVAL_P(tmp));
+				zval_ptr_dtor(&tmp);
+			}
+			break;
+		}
+		default: {
+			fprintf(stderr,"PHP::echo does not support %s\n",mrb_obj_classname(mrb,argv));
+			break;
+		}
 	}
-	
+
 	return argv;
 }
 
