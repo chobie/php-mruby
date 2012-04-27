@@ -1,0 +1,10 @@
+#!/usr/bin/env php
+<?php
+if (!is_file($_SERVER['argv'][1])) {
+  echo "puby <file>" . PHP_EOL;
+  exit(-1);
+}
+
+$source = file_get_contents($_SERVER['argv'][1]);
+$mrb = new Mruby();
+$mrb->run($source);
