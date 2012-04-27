@@ -118,6 +118,11 @@ PHP::echo string
 
     PHP::echo "Hello World"
 
+PHP::call_user_func func_name args
+  call php function.
+
+    PHP::echo PHP::call_user_func "base64_encode", "Hello world"
+
 PHP::_REQUEST
   returns converted $_REQUEST hash
     

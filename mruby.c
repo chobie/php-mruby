@@ -23,6 +23,40 @@
 void php_mruby_init(TSRMLS_D);
 zend_class_entry *mruby_class_entry;
 
+static int php_mruby_call_user_function_v(HashTable *function_table, zval **object_pp, zval *function_name, zval *retval_ptr, zend_uint param_count, ...)
+{
+	va_list ap;
+	size_t i;
+	int ret;
+	zval **params;
+	zval *tmp;
+	TSRMLS_FETCH();
+
+	if (param_count > 0) {
+		params = emalloc(sizeof(zval**) * param_count);
+		va_start(ap, param_count);
+		for (i=0; i<param_count;i++) {
+			params[i] = va_arg(ap, zval*);
+		}
+		va_end(ap);
+	} else {
+		params = NULL;
+	}
+
+	ret = call_user_function(function_table, object_pp, function_name, retval_ptr, param_count,params TSRMLS_CC);
+
+	if (param_count > 0) {
+		for (i=0; i<param_count;i++) {
+			if (params[i] != NULL) {
+				zval_ptr_dtor(&params[i]);
+			}
+		}
+		efree(params);
+	}
+	return ret;
+}
+
+
 /** serializes array to mrb_value */
 mrb_value php_mruby_serialize_array(mrb_state *mrb, zval *value TSRMLS_DC)
 {
@@ -167,12 +201,59 @@ static mrb_value phplib_echo(mrb_state *mrb, mrb_value self)
 	return argv;
 }
 
+static mrb_value phplib_call_user_func(mrb_state *mrb, mrb_value self)
+{
+	TSRMLS_FETCH();
+	
+	zval *z_func_name, *result, **params;
+	mrb_value *argv, rb_result;
+	int ret, i, param_count, argc = 0;
+	mrb_get_args(mrb, "*", &argv, &argc);
+
+	if (argc > 1) {
+		int offset = 0;
+		param_count = argc-1;
+		params = emalloc(sizeof(zval**) * param_count);
+		for (offset = 0, i=1; i<argc;i++,offset++) {
+			zval *tmp;
+			
+			php_mruby_convert_mrb_value(&tmp, mrb, argv[i] TSRMLS_CC);
+			params[offset] = tmp;
+		}
+	} else {
+		params = NULL;
+	}
+
+	MAKE_STD_ZVAL(result);
+	php_mruby_convert_mrb_value(&z_func_name, mrb, argv[0] TSRMLS_CC);
+	ret = call_user_function(&EG(symbol_table), NULL, z_func_name, result, param_count, params TSRMLS_CC);
+
+	if (param_count > 0) {
+		for (i=0; i<param_count;i++) {
+			if (params[i] != NULL) {
+				zval_ptr_dtor(&params[i]);
+			}
+		}
+		efree(params);
+	}
+	
+	if (Z_TYPE_P(result) == IS_STRING) {
+		rb_result = mrb_str_new_cstr(mrb, Z_STRVAL_P(result));
+	}
+
+	zval_ptr_dtor(&z_func_name);
+	zval_ptr_dtor(&result);
+	
+	return rb_result;
+}
+
 static void phplib_initialize(mrb_state *mrb)
 {
 	struct RClass *phplib;
 
 	phplib = mrb_define_module(mrb, "PHP");
 	mrb_define_class_method(mrb,phplib,"echo",phplib_echo,ARGS_REQ(1));
+	mrb_define_class_method(mrb,phplib,"call_user_func",phplib_call_user_func,ARGS_ANY());
 	mrb_define_class_method(mrb,phplib,"_SERVER",phplib_eg_server,ARGS_REQ(1));
 	mrb_define_class_method(mrb,phplib,"_REQUEST",phplib_eg_request,ARGS_REQ(1));
 }
