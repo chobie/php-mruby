@@ -106,7 +106,7 @@ $mrb = new Mruby();
 $mrb->run('puts "Hello World"');
 ````
 
-### PHP mruby modules
+### PHP mruby modules (experimental)
 
 now, you can import PHP module in your mruby instance!
 
