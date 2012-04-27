@@ -52,7 +52,7 @@ mrb_value php_mruby_serialize_array(mrb_state *mrb, zval *value TSRMLS_DC)
 		key_type = zend_hash_get_current_key_ex(h, &key, &key_len, &key_index, 0, &pos);
 		zend_hash_get_current_data_ex(h, (void *) &d, &pos);
 		
-		/* todo: alos serializes other types */
+		/* todo: also serializes other types */
 		if (Z_TYPE_PP(d) == IS_STRING) {
 			if (Z_STRLEN_PP(d) == 0) {
 				mrb_hash_set(mrb, tmp, mrb_str_new_cstr(mrb, key), mrb_str_new_cstr(mrb, ""));
