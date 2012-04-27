@@ -135,37 +135,32 @@ int php_mruby_convert_mrb_value(zval **result, mrb_state *mrb, mrb_value argv TS
 	return retval;
 }
 
-static mrb_value phplib_eg_request(mrb_state *mrb, mrb_value self)
+
+static mrb_value phplib_get_global_zval(mrb_state *mrb, char *name, size_t length)
 {
 	TSRMLS_FETCH();
 	mrb_value result;
 	zval **data;
 	
 	if (PG(auto_globals_jit)) {
-		zend_is_auto_global("_REQUEST", sizeof("_REQUEST")-1 TSRMLS_CC);
+		zend_is_auto_global(name, length-1 TSRMLS_CC);
 	}
-	if (zend_hash_find(&EG(symbol_table),"_REQUEST",sizeof("_REQUEST"),(void **) &data) == SUCCESS) {
+	if (zend_hash_find(&EG(symbol_table),name,length,(void **) &data) == SUCCESS) {
 		result = php_mruby_serialize_array(mrb, *data TSRMLS_CC);
 	}
 
 	return result;
 }
 
+static mrb_value phplib_eg_request(mrb_state *mrb, mrb_value self)
+{
+	return phplib_get_global_zval(mrb, "_REQUEST", sizeof("_REQUEST"));
+}
+
 
 static mrb_value phplib_eg_server(mrb_state *mrb, mrb_value self)
 {
-	TSRMLS_FETCH();
-	mrb_value result;
-	zval **data;
-
-	if (PG(auto_globals_jit)) {
-		zend_is_auto_global("_SERVER", sizeof("_SERVER")-1 TSRMLS_CC);
-	}
-	if (zend_hash_find(&EG(symbol_table),"_SERVER",sizeof("_SERVER"),(void **) &data) == SUCCESS) {
-		result = php_mruby_serialize_array(mrb, *data TSRMLS_CC);
-	}
-	
-	return result;
+	return phplib_get_global_zval(mrb, "_SERVER", sizeof("_SERVER"));
 }
 
 static mrb_value phplib_echo(mrb_state *mrb, mrb_value self)
