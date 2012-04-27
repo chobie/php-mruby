@@ -59,6 +59,31 @@ create a mruby instance.
 $mrb = new Mruby();
 ````
 
+## \Mruby::assign(string $key, string $value)
+
+### *Description*
+
+assign global variable to mruby.
+
+### *Parameters*
+
+*key*: variable name. it need '$' prefix.
+*value*: value. currently, only support string.
+
+### *Return Value*
+
+*void*:
+
+### *Example*
+
+````php
+<?php
+$mrb = new Mruby();
+$mrb->assign('$myname','chobie');
+$mrb->run('puts $myname');
+````
+
+
 ## \Mruby::run(string $code)
 
 ### *Description*
@@ -79,6 +104,29 @@ run ruby code with current instance
 <?php
 $mrb = new Mruby();
 $mrb->run('puts "Hello World"');
+````
+
+### PHP mruby modules
+
+now, you can import PHP module in your mruby instance!
+
+````
+require 'php'
+
+PHP::echo string
+  echo string with php
+
+    PHP::echo "Hello World"
+
+PHP::_REQUEST
+  returns converted $_REQUEST hash
+    
+    PHP::_REQUEST.each {| k,v | PHP::echo k + " " + v }
+
+PHP::_SERVER
+  returns converted $_SERVER hash
+    
+    PHP::_SERVER.each {| k,v | PHP::echo k + " " + v }
 ````
 
 # Contributors
