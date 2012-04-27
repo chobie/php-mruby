@@ -14,9 +14,7 @@ git submodule init
 git submodule update
 cd mruby
 make
-cd lib
-cp ritevm.a libritevm.a
-cd ../../
+cd ../
 phpize
 ./configure
 make
