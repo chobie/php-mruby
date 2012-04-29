@@ -38,40 +38,6 @@ static zend_object_value php_mruby_get_env_backref(mrb_state *state);
 /* are we need this here? */
 KHASH_INIT(ht, mrb_value, mrb_value, 1, mrb_hash_ht_hash_func, mrb_hash_ht_hash_equal);
 
-/* unused? */
-static int php_mruby_call_user_function_v(HashTable *function_table, zval **object_pp, zval *function_name, zval *retval_ptr, zend_uint param_count, ...)
-{
-	va_list ap;
-	size_t i;
-	int ret;
-	zval **params;
-	zval *tmp;
-	TSRMLS_FETCH();
-
-	if (param_count > 0) {
-		params = emalloc(sizeof(zval**) * param_count);
-		va_start(ap, param_count);
-		for (i=0; i<param_count;i++) {
-			params[i] = va_arg(ap, zval*);
-		}
-		va_end(ap);
-	} else {
-		params = NULL;
-	}
-
-	ret = call_user_function(function_table, object_pp, function_name, retval_ptr, param_count,params TSRMLS_CC);
-
-	if (param_count > 0) {
-		for (i=0; i<param_count;i++) {
-			if (params[i] != NULL) {
-				zval_ptr_dtor(&params[i]);
-			}
-		}
-		efree(params);
-	}
-	return ret;
-}
-
 static zend_object_value php_mruby_get_env_backref(mrb_state *mrb)
 {
 	zend_object_value retval;
