@@ -285,6 +285,7 @@ static mrb_value phplib_call_user_func(mrb_state *mrb, mrb_value self)
 		}
 	} else {
 		params = NULL;
+		param_count = 0;
 	}
 
 	MAKE_STD_ZVAL(result);
