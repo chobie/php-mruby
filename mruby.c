@@ -21,13 +21,24 @@
 #include "mruby/khash.h"
 #include "mruby/hash.h"
 #include "mruby/array.h"
+#include "mruby/data.h"
+#include "mruby/variable.h"
 
 void php_mruby_init(TSRMLS_D);
 zend_class_entry *mruby_class_entry;
+zend_class_entry *mruby_object_class_entry;
+
+static const struct mrb_data_type php_mruby_object_handle_data_type = {
+	"PHPObjectHandle", NULL
+};
+
+static zend_object_value php_mruby_object_create(zend_object_value owner, mrb_value value TSRMLS_CC);
+static zend_object_value php_mruby_get_env_backref(mrb_state *state);
 
 /* are we need this here? */
 KHASH_INIT(ht, mrb_value, mrb_value, 1, mrb_hash_ht_hash_func, mrb_hash_ht_hash_equal);
 
+/* unused? */
 static int php_mruby_call_user_function_v(HashTable *function_table, zval **object_pp, zval *function_name, zval *retval_ptr, zend_uint param_count, ...)
 {
 	va_list ap;
@@ -61,68 +72,101 @@ static int php_mruby_call_user_function_v(HashTable *function_table, zval **obje
 	return ret;
 }
 
-
-/** serializes array to mrb_value */
-mrb_value php_mruby_serialize_array(mrb_state *mrb, zval *value TSRMLS_DC)
+static zend_object_value php_mruby_get_env_backref(mrb_state *mrb)
 {
-	HashTable *h;
-	HashPosition pos;
-	size_t n;
-	zval **d;
-	mrb_value tmp;
-	
-	char *key;
-	uint key_len;
-	int key_type;
-	ulong key_index;
-	
-	h = Z_ARRVAL_P(value);
-	n = zend_hash_num_elements(h);
-
-	tmp = mrb_hash_new(mrb,n);
-	
-	zend_hash_internal_pointer_reset_ex(h, &pos);
-	for (;; zend_hash_move_forward_ex(h, &pos)) {
-		if (key_type == HASH_KEY_NON_EXISTANT) {
-			break;
-		}
-		
-		zval *t;
-		key_type = zend_hash_get_current_key_ex(h, &key, &key_len, &key_index, 0, &pos);
-		zend_hash_get_current_data_ex(h, (void *) &d, &pos);
-		
-		/* todo: also serializes other types */
-		if (Z_TYPE_PP(d) == IS_STRING) {
-			if (Z_STRLEN_PP(d) == 0) {
-				mrb_hash_set(mrb, tmp, mrb_str_new_cstr(mrb, key), mrb_str_new_cstr(mrb, ""));
-			} else {
-				mrb_hash_set(mrb, tmp, mrb_str_new_cstr(mrb, key), mrb_str_new_cstr(mrb, Z_STRVAL_PP(d)));
-			}
-		}
-	}
-
-	return tmp;
+	zend_object_value retval;
+	retval.handle = (zend_object_handle)(uintptr_t)mrb_check_datatype(mrb, mrb_const_get(mrb, mrb_obj_value(mrb->object_class), mrb_intern(mrb, "__php__")), &php_mruby_object_handle_data_type);
+	retval.handlers = zend_get_std_object_handlers();
+	return retval;
 }
 
-int php_mruby_convert_mrb_value(zval **result, mrb_state *mrb, mrb_value argv TSRMLS_DC)
+/** serializes array to mrb_value */
+mrb_value php_mruby_to_mrb_value(mrb_state *mrb, zval *value TSRMLS_DC) /* {{{ */
 {
-	int retval = SUCCESS;
-	zval *tmp;
-	MAKE_STD_ZVAL(tmp);
+	switch (Z_TYPE_P(value)) {
+		case IS_NULL:
+			return mrb_nil_value();
+
+		case IS_BOOL:
+			return Z_LONG_P(value) ? mrb_true_value(): mrb_false_value();
+
+		case IS_LONG:
+			return mrb_fixnum_value(Z_LONG_P(value));
+
+		case IS_DOUBLE:
+			return mrb_float_value(Z_DOUBLE_P(value));
+
+		case IS_STRING:
+			return mrb_str_new(mrb, Z_STRVAL_P(value), Z_STRLEN_P(value));
+
+		case IS_ARRAY: {
+			HashTable *h;
+			HashPosition pos;
+			size_t n;
+			zval **d;
+			mrb_value tmp;
+			
+			char *key;
+			uint key_len;
+			int key_type;
+			ulong key_index;
+			
+			h = Z_ARRVAL_P(value);
+			n = zend_hash_num_elements(h);
+
+			tmp = mrb_hash_new(mrb,n);
+			
+			for (zend_hash_internal_pointer_reset_ex(h, &pos);
+					(key_type = zend_hash_get_current_key_ex(h, &key, &key_len, &key_index, 0, &pos)) != HASH_KEY_NON_EXISTANT;
+					zend_hash_move_forward_ex(h, &pos)) {
+				zval *t;
+				zend_hash_get_current_data_ex(h, (void *) &d, &pos);
+				if (key_type == HASH_KEY_IS_STRING) {
+					mrb_hash_set(mrb, tmp, mrb_str_new(mrb, key, key_len), php_mruby_to_mrb_value(mrb, *d TSRMLS_DC));
+				} else {
+					mrb_hash_set(mrb, tmp, mrb_fixnum_value(key_index), php_mruby_to_mrb_value(mrb, *d TSRMLS_DC));
+				}
+			}
+			return tmp;
+		}
+
+		case IS_OBJECT: {
+			return mrb_str_new_cstr(mrb, "* FIXME *");
+		}
+
+		default: break;
+	}
+	php_error_docref(NULL TSRMLS_CC, E_ERROR, "Failed to convert a PHP value to MRuby value");
+	/* never get here */
+} /* }}} */
+
+static zval *php_mruby_wrap(zend_object_value php_mrb, mrb_value value TSRMLS_CC) /* {{{ */
+{
+	zval *retval;
+	ALLOC_INIT_ZVAL(retval);
+	retval->type = IS_OBJECT;
+	retval->value.obj = php_mruby_object_create(php_mrb, value TSRMLS_CC);
+	return retval;
+} /* }}} */
+
+zval *php_mruby_convert_mrb_value(zend_object_value php_mrb, mrb_value argv TSRMLS_DC) /* {{{ */
+{
+	zval *retval = NULL;
 	
 	switch (mrb_type(argv)) {
 		case MRB_TT_STRING: {
-			struct RString *str;
-			str = mrb_str_ptr(argv);
-			ZVAL_STRING(tmp, str->buf,1);
+			ALLOC_INIT_ZVAL(retval);
+			ZVAL_STRINGL(retval, RSTRING_PTR(argv), RSTRING_LEN(argv), 1);
 			break;
 		}
 		case MRB_TT_FIXNUM: {
-			ZVAL_LONG(tmp, (long)argv.value.i);
+			ALLOC_INIT_ZVAL(retval);
+			ZVAL_LONG(retval, (long)argv.value.i);
 			break;
 		}
 		case MRB_TT_FLOAT: {
-			ZVAL_DOUBLE(tmp, (double)argv.value.f);
+			ALLOC_INIT_ZVAL(retval);
+			ZVAL_DOUBLE(retval, (double)argv.value.f);
 			break;
 		}
 		case MRB_TT_ARRAY: {
@@ -133,20 +177,14 @@ int php_mruby_convert_mrb_value(zval **result, mrb_state *mrb, mrb_value argv TS
 			int length = RARRAY_LEN(argv);
 
 			array_ptr = mrb_ary_ptr(argv);
-			array_init(tmp);
-			hash = Z_ARRVAL_P(tmp);
-			//zend_hash_init(hash, length, NULL, ZVAL_PTR_DTOR, 0);
-			
-			for (i = 0; i < length; i++) {
-				zval *z_val;
-				php_mruby_convert_mrb_value(&z_val,mrb, array_ptr->buf[i] TSRMLS_CC);
 
-				//sprintf(key,"%d",i);
-				//zend_hash_add(hash,key, strlen(key)+1,(void **)&z_val,sizeof(z_val),NULL);
-				add_next_index_zval(tmp,z_val);
+			ALLOC_INIT_ZVAL(retval);
+			array_init(retval);
+			hash = Z_ARRVAL_P(retval);
+			for (i = 0; i < length; i++) {
+				add_next_index_zval(retval, php_mruby_convert_mrb_value(php_mrb, array_ptr->buf[i] TSRMLS_CC));
 			}
-			
-			Z_ARRVAL_P(tmp) = hash;
+			Z_ARRVAL_P(retval) = hash;
 			break;
 		}
 		case MRB_TT_HASH: {
@@ -155,8 +193,9 @@ int php_mruby_convert_mrb_value(zval **result, mrb_state *mrb, mrb_value argv TS
 			HashTable *hash;
 			int length = RHASH_SIZE(argv);
 
-			array_init(tmp);
-			hash = Z_ARRVAL_P(tmp);
+			ALLOC_INIT_ZVAL(retval);
+			array_init(retval);
+			hash = Z_ARRVAL_P(retval);
 
 			for (k = kh_begin(h); k != kh_end(h); k++) {
 				mrb_value hash_key,hash_value;
@@ -165,44 +204,42 @@ int php_mruby_convert_mrb_value(zval **result, mrb_state *mrb, mrb_value argv TS
 				if (!kh_exist(h, k)) {
 					continue;
 				}
-				if(php_mruby_convert_mrb_value(&z_hash_key,mrb, kh_key(h,k) TSRMLS_CC) == FAILURE) {
-					/* for now. */
-					continue;
-				}
-				
-				php_mruby_convert_mrb_value(&z_hash_val,mrb, kh_value(h,k) TSRMLS_CC);
-				
+
+				z_hash_key = php_mruby_convert_mrb_value(php_mrb, kh_key(h,k) TSRMLS_CC);
+				z_hash_val = php_mruby_convert_mrb_value(php_mrb, kh_value(h,k) TSRMLS_CC);
+
 				if (Z_TYPE_P(z_hash_key) != IS_STRING) {
 					convert_to_string(z_hash_key);
 				}
 				
-				zend_hash_add(hash,Z_STRVAL_P(z_hash_key), Z_STRLEN_P(z_hash_key)+1,(void **)&z_hash_val,sizeof(z_hash_val),NULL);
+				zend_hash_add(hash, Z_STRVAL_P(z_hash_key), Z_STRLEN_P(z_hash_key) + 1, (void **)&z_hash_val, sizeof(z_hash_val), NULL);
 				zval_ptr_dtor(&z_hash_key);
 			}
 			
-			Z_ARRVAL_P(tmp) = hash;
+			Z_ARRVAL_P(retval) = hash;
 			break;
 		}
-		default: {
-			if (strcmp("NilClass",mrb_obj_classname(mrb,argv)) == 0) {
-				zval_ptr_dtor(&tmp);
-				ZVAL_NULL(tmp);
+		case MRB_TT_TRUE: {
+			ALLOC_INIT_ZVAL(retval);
+			ZVAL_BOOL(retval, TRUE);
+			break;
+		}
+		case MRB_TT_FALSE: {
+			ALLOC_INIT_ZVAL(retval);
+			if (argv.value.p) {
+				ZVAL_BOOL(retval, FALSE);
 			} else {
-				fprintf(stderr,"php_mruby_convert_mrb_value does not support %s\n",mrb_obj_classname(mrb,argv));
-				zval_ptr_dtor(&tmp);
-				retval = FAILURE;
+				ZVAL_NULL(retval);
 			}
 			break;
 		}
+		default: {
+			retval = php_mruby_wrap(php_mrb, argv TSRMLS_CC);
+			break;
+		}
 	}
-	
-	if (retval == SUCCESS) {
-		*result = tmp;
-	}
-
 	return retval;
-}
-
+} /* }}} */
 
 static mrb_value phplib_get_global_zval(mrb_state *mrb, char *name, size_t length)
 {
@@ -213,8 +250,8 @@ static mrb_value phplib_get_global_zval(mrb_state *mrb, char *name, size_t lengt
 	if (PG(auto_globals_jit)) {
 		zend_is_auto_global(name, length-1 TSRMLS_CC);
 	}
-	if (zend_hash_find(&EG(symbol_table),name,length,(void **) &data) == SUCCESS) {
-		result = php_mruby_serialize_array(mrb, *data TSRMLS_CC);
+	if (zend_hash_find(&EG(symbol_table), name, length, (void **) &data) == SUCCESS) {
+		result = php_mruby_to_mrb_value(mrb, *data TSRMLS_CC);
 	}
 
 	return result;
@@ -245,12 +282,12 @@ static mrb_value phplib_echo(mrb_state *mrb, mrb_value self)
 		case MRB_TT_STRING:
 		{
 			zval *tmp;
-			if (php_mruby_convert_mrb_value(&tmp, mrb, argv TSRMLS_CC) == SUCCESS) {
+			if ((tmp = php_mruby_convert_mrb_value(php_mruby_get_env_backref(mrb), argv TSRMLS_CC))) {
 				if (Z_TYPE_P(tmp) != IS_STRING) {
 					convert_to_string(tmp);
 				}
 				
-				php_printf("%s",Z_STRVAL_P(tmp));
+				zend_print_variable(tmp);
 				zval_ptr_dtor(&tmp);
 			}
 			break;
@@ -271,6 +308,7 @@ static mrb_value phplib_call_user_func(mrb_state *mrb, mrb_value self)
 	zval *z_func_name, *result, **params;
 	mrb_value *argv, rb_result;
 	int ret, i, param_count, argc = 0;
+	zend_object_value php_mrb = php_mruby_get_env_backref(mrb);
 	mrb_get_args(mrb, "*", &argv, &argc);
 
 	if (argc > 1) {
@@ -278,10 +316,7 @@ static mrb_value phplib_call_user_func(mrb_state *mrb, mrb_value self)
 		param_count = argc-1;
 		params = emalloc(sizeof(zval**) * param_count);
 		for (offset = 0, i=1; i<argc;i++,offset++) {
-			zval *tmp;
-			
-			php_mruby_convert_mrb_value(&tmp, mrb, argv[i] TSRMLS_CC);
-			params[offset] = tmp;
+			params[offset] = php_mruby_convert_mrb_value(php_mrb, argv[i] TSRMLS_CC);
 		}
 	} else {
 		params = NULL;
@@ -289,25 +324,21 @@ static mrb_value phplib_call_user_func(mrb_state *mrb, mrb_value self)
 	}
 
 	MAKE_STD_ZVAL(result);
-	php_mruby_convert_mrb_value(&z_func_name, mrb, argv[0] TSRMLS_CC);
+	z_func_name = php_mruby_convert_mrb_value(php_mrb, argv[0] TSRMLS_CC);
 	ret = call_user_function(&EG(symbol_table), NULL, z_func_name, result, param_count, params TSRMLS_CC);
 
 	if (param_count > 0) {
 		for (i=0; i<param_count;i++) {
-			if (params[i] != NULL) {
-				zval_ptr_dtor(&params[i]);
-			}
+			zval_ptr_dtor(&params[i]);
 		}
 		efree(params);
 	}
 	
-	if (Z_TYPE_P(result) == IS_STRING) {
-		rb_result = mrb_str_new_cstr(mrb, Z_STRVAL_P(result));
-	}
+	rb_result = php_mruby_to_mrb_value(mrb, result TSRMLS_CC);
 
 	zval_ptr_dtor(&z_func_name);
 	zval_ptr_dtor(&result);
-	
+
 	return rb_result;
 }
 
@@ -321,12 +352,10 @@ static mrb_value phplib_var_dump(mrb_state *mrb, mrb_value self)
 	mrb_get_args(mrb, "*", &argv, &argc);
 
 	if (argc > 0) {
+		zend_object_value php_mrb = php_mruby_get_env_backref(mrb);
 		params = emalloc(sizeof(zval**) * argc);
 		for (i=0; i<argc;i++) {
-			zval *tmp;
-			
-			php_mruby_convert_mrb_value(&tmp, mrb, argv[i] TSRMLS_CC);
-			params[i] = tmp;
+			params[i] = php_mruby_convert_mrb_value(php_mrb, argv[i] TSRMLS_CC);
 		}
 	} else {
 		params = NULL;
@@ -375,32 +404,6 @@ static void php_mruby_free_storage(php_mruby_t *obj TSRMLS_DC)
 	}
 	efree(obj);
 }
-
-zend_object_value php_mruby_new(zend_class_entry *ce TSRMLS_DC)
-{
-	zend_object_value retval;
-	php_mruby_t *obj;
-	zval *tmp;
-
-	obj = ecalloc(1, sizeof(*obj));
-	zend_object_std_init( &obj->zo, ce TSRMLS_CC );
-#if ZEND_MODULE_API_NO >= 20100525
-	object_properties_init(&(obj->zo), ce); 
-#else
-	zend_hash_copy(obj->zo.properties, &ce->default_properties, (copy_ctor_func_t) zval_add_ref, (void *) &tmp, sizeof(zval *));
-#endif
-
-	obj->mrb = mrb_open();
-	phplib_initialize(obj->mrb);
-
-	retval.handle = zend_objects_store_put(obj, 
-		(zend_objects_store_dtor_t)zend_objects_destroy_object,
-		(zend_objects_free_object_storage_t)php_mruby_free_storage,
-		NULL TSRMLS_CC);
-	retval.handlers = zend_get_std_object_handlers();
-	return retval;
-}
-
 
 ZEND_BEGIN_ARG_INFO_EX(arginfo_mruby_assign, 0, 0, 1)
 	ZEND_ARG_INFO(0, key)
@@ -459,6 +462,7 @@ PHP_METHOD(mruby, run)
 
 	p = mrb_parse_string(mrb, code);
 	n = mrb_generate_code(mrb, p->tree);
+	mrb_pool_close(p->pool);
 
 	if (n >= 0) {
 		mrb_run(mrb, mrb_proc_new(mrb, mrb->irep[n]), mrb_top_self(mrb));
@@ -475,7 +479,6 @@ PHP_METHOD(mruby, evaluateScript)
 	mrb_state *mrb;
 	struct mrb_parser_state *p;
 	php_mruby_t *object = NULL;
-	zval *z_result;
 	mrb_value result;
 	int n = -1;
 	char *code;
@@ -490,17 +493,51 @@ PHP_METHOD(mruby, evaluateScript)
 
 	p = mrb_parse_string(mrb, code);
 	n = mrb_generate_code(mrb, p->tree);
+	mrb_pool_close(p->pool);
+
 	if (n >= 0) {
 		result = mrb_run(mrb, mrb_proc_new(mrb, mrb->irep[n]), mrb_nil_value());
 	}
 	
 	if (mrb->exc) {
 		mrb_p(mrb, mrb_obj_value(mrb->exc));
+		RETURN_NULL();
 	}
 
-	php_mruby_convert_mrb_value(&z_result, mrb, result TSRMLS_CC);
-	
-	RETVAL_ZVAL(z_result,0,0);
+	{
+		zval *tmp = php_mruby_convert_mrb_value(Z_OBJVAL_P(getThis()), result TSRMLS_CC);
+		*return_value = *tmp;
+		efree(tmp);
+	}
+}
+
+static zend_object_value php_mruby_new(zend_class_entry *ce TSRMLS_DC)
+{
+	zend_object_value retval;
+	php_mruby_t *obj;
+	zval *tmp;
+
+	obj = ecalloc(1, sizeof(*obj));
+	zend_object_std_init( &obj->zo, ce TSRMLS_CC );
+#if ZEND_MODULE_API_NO >= 20100525
+	object_properties_init(&(obj->zo), ce); 
+#else
+	zend_hash_copy(obj->zo.properties, &ce->default_properties, (copy_ctor_func_t) zval_add_ref, (void *) &tmp, sizeof(zval *));
+#endif
+
+	obj->mrb = mrb_open();
+	phplib_initialize(obj->mrb);
+
+	retval.handle = zend_objects_store_put(obj, 
+		(zend_objects_store_dtor_t)zend_objects_destroy_object,
+		(zend_objects_free_object_storage_t)php_mruby_free_storage,
+		NULL TSRMLS_CC);
+	retval.handlers = zend_get_std_object_handlers();
+	{
+		struct RClass *wrapper_class = mrb_define_class(obj->mrb, "PHPObjectHandle", obj->mrb->object_class);
+		mrb_define_global_const(obj->mrb, "__php__", mrb_obj_value(mrb_data_object_alloc(obj->mrb, wrapper_class, (void *)(uintptr_t)retval.handle, &php_mruby_object_handle_data_type)));
+	}
+	return retval;
 }
 
 static zend_function_entry php_mruby_methods[] = {
@@ -510,11 +547,280 @@ static zend_function_entry php_mruby_methods[] = {
 	{NULL, NULL, NULL}
 };
 
-void php_mruby_init(TSRMLS_D)
+static php_mruby_mruby_class_init(TSRMLS_D)
 {
 	zend_class_entry ce;
-
 	INIT_CLASS_ENTRY(ce, "MRuby", php_mruby_methods);
 	mruby_class_entry = zend_register_internal_class(&ce TSRMLS_CC);
 	mruby_class_entry->create_object = php_mruby_new;
 }
+
+static zval *php_mruby_object_property_read(zval *zv, zval *member, int type TSRMLS_DC) /* {{{ */
+{
+	zval *retval;
+	php_mruby_object_t *object = (php_mruby_object_t *)zend_object_store_get_object(zv TSRMLS_CC);
+	mrb_state *mrb = ((php_mruby_t *)zend_object_store_get_object_by_handle(object->owner.handle TSRMLS_CC))->mrb;
+
+	if (UNEXPECTED(Z_TYPE_P(member) != IS_STRING)) {
+		zval *tmp;
+		ALLOC_ZVAL(tmp);
+		*tmp = *member;
+		INIT_PZVAL(tmp);
+		zval_copy_ctor(tmp);
+		convert_to_string(tmp);
+		member = tmp;
+	} else {
+		Z_ADDREF_P(member);
+	}
+
+	retval = php_mruby_convert_mrb_value(object->owner, mrb_funcall(mrb, object->value, Z_STRVAL_P(member), 0) TSRMLS_CC);
+	Z_DELREF_P(retval); /* this is ok. retval gets addref'ed after the function call */
+
+	zval_ptr_dtor(&member);
+	return retval;
+} /* }}} */
+
+static void php_mruby_object_property_write(zval *zv, zval *member, zval *value_zv TSRMLS_DC) /* {{{ */
+{
+	zval member_with_equal;
+	zval *retval;
+	php_mruby_object_t *object = (php_mruby_object_t *)zend_object_store_get_object(zv TSRMLS_CC);
+	mrb_state *mrb = ((php_mruby_t *)zend_object_store_get_object_by_handle(object->owner.handle TSRMLS_CC))->mrb;
+
+	member_with_equal = *member;
+	zval_copy_ctor(&member_with_equal);
+	if (Z_TYPE(member_with_equal) != IS_STRING) {
+		convert_to_string(&member_with_equal);
+	}
+
+	{
+		int len = Z_STRLEN(member_with_equal);	
+		char *tmp = Z_STRVAL(member_with_equal);
+		tmp = erealloc(tmp, len + 2);
+		tmp[len] = '=';
+		tmp[len + 1] = '\0';
+		ZVAL_STRINGL(&member_with_equal, tmp, len + 1, 0);
+	}
+
+	mrb_funcall(mrb, object->value, Z_STRVAL(member_with_equal), 1, php_mruby_to_mrb_value(mrb, value_zv TSRMLS_CC));
+	zval_dtor(&member_with_equal);
+}
+/* }}} */
+
+static zval *php_mruby_object_dimension_read(zval *zv, zval *offset, int type TSRMLS_DC) /* {{{ */
+{
+	zval offset_with_brackets;
+	zval *retval;
+	php_mruby_object_t *object = (php_mruby_object_t *)zend_object_store_get_object(zv TSRMLS_CC);
+	mrb_state *mrb = ((php_mruby_t *)zend_object_store_get_object_by_handle(object->owner.handle TSRMLS_CC))->mrb;
+
+	offset_with_brackets = *offset;
+	zval_copy_ctor(&offset_with_brackets);
+	if (Z_TYPE(offset_with_brackets) != IS_STRING) {
+		convert_to_string(&offset_with_brackets);
+	}
+
+	{
+		int len = Z_STRLEN(offset_with_brackets);	
+		char *tmp = Z_STRVAL(offset_with_brackets);
+		tmp = erealloc(tmp, len + 3);
+		tmp[len] = '[';
+		tmp[len + 1] = ']';
+		tmp[len + 2] = '\0';
+		ZVAL_STRINGL(&offset_with_brackets, tmp, len + 2, 0);
+	}
+
+	retval = php_mruby_convert_mrb_value(object->owner, mrb_funcall(mrb, object->value, Z_STRVAL(offset_with_brackets), 0) TSRMLS_CC);
+	Z_DELREF_P(retval); /* this is ok. retval gets addref'ed after the function call */
+
+	zval_dtor(&offset_with_brackets);
+	return retval;
+} /* }}} */
+
+static void php_mruby_object_dimension_write(zval *zv, zval *offset, zval *value_zv TSRMLS_DC) /* {{{ */
+{
+	zval offset_with_brackets_and_equal;
+	zval *retval;
+	php_mruby_object_t *object = (php_mruby_object_t *)zend_object_store_get_object(zv TSRMLS_CC);
+	mrb_state *mrb = ((php_mruby_t *)zend_object_store_get_object_by_handle(object->owner.handle TSRMLS_CC))->mrb;
+
+	offset_with_brackets_and_equal = *offset;
+	zval_copy_ctor(&offset_with_brackets_and_equal);
+	if (Z_TYPE(offset_with_brackets_and_equal) != IS_STRING) {
+		convert_to_string(&offset_with_brackets_and_equal);
+	}
+
+	{
+		int len = Z_STRLEN(offset_with_brackets_and_equal);	
+		char *tmp = Z_STRVAL(offset_with_brackets_and_equal);
+		tmp = erealloc(tmp, len + 4);
+		tmp[len] = '[';
+		tmp[len + 1] = ']';
+		tmp[len + 2] = '=';
+		tmp[len + 3] = '\0';
+		ZVAL_STRINGL(&offset_with_brackets_and_equal, tmp, len + 3, 0);
+	}
+
+	mrb_funcall(mrb, object->value, Z_STRVAL(offset_with_brackets_and_equal), 1, php_mruby_to_mrb_value(mrb, value_zv TSRMLS_CC));
+	zval_dtor(&offset_with_brackets_and_equal);
+} /* }}} */
+
+static int php_mruby_object_property_exists(zval *zv, zval *member, int check_empty TSRMLS_DC) /* {{{ */
+{
+	php_mruby_object_t *object = (php_mruby_object_t *)zend_object_store_get_object(zv TSRMLS_CC);
+	mrb_state *mrb = ((php_mruby_t *)zend_object_store_get_object_by_handle(object->owner.handle TSRMLS_CC))->mrb;
+	int retval;
+
+	if (UNEXPECTED(Z_TYPE_P(member) != IS_STRING)) {
+		zval *tmp;
+		ALLOC_ZVAL(tmp);
+		*tmp = *member;
+		INIT_PZVAL(tmp);
+		zval_copy_ctor(tmp);
+		convert_to_string(tmp);
+		member = tmp;
+	} else {
+		Z_ADDREF_P(member);
+	}
+
+	retval = mrb_obj_respond_to(mrb_obj_class(mrb, object->value), mrb_intern(mrb, Z_STRVAL_P(member)));
+	zval_ptr_dtor(&member);
+	return retval;
+} /* }}} */
+
+static int php_mruby_object_compare(zval *lhs_zv, zval *rhs_zv TSRMLS_DC) /* {{{ */
+{
+	int retval;
+	mrb_state *mrb;
+	php_mruby_object_t *lhs = (php_mruby_object_t *)zend_object_store_get_object(lhs_zv TSRMLS_CC);
+	php_mruby_object_t *rhs = (php_mruby_object_t *)zend_object_store_get_object(rhs_zv TSRMLS_CC);
+
+	if (rhs == NULL) {
+		zend_throw_exception(zend_exception_get_default(TSRMLS_C), "RHS operand is not a MRuby object wrapper", 0 TSRMLS_CC);
+		return 0;
+	}
+
+	if (lhs->owner.handle != rhs->owner.handle) {
+		zend_throw_exception(zend_exception_get_default(TSRMLS_C), "Cannot compare objects of the different owners", 0 TSRMLS_CC);
+		return 0;
+	}
+
+	{
+		mrb_value tmp = mrb_funcall(((php_mruby_t *)zend_object_store_get_object_by_handle(lhs->owner.handle TSRMLS_CC))->mrb, lhs->value, "<=>", 1, rhs->value);
+		if (mrb_type(tmp) != MRB_TT_FIXNUM) {
+			zend_throw_exception(zend_exception_get_default(TSRMLS_C), "MRuby object responded with a non-Fixnum value, which is invalid", 0 TSRMLS_CC);
+			return 0;
+		}
+		return tmp.value.i;
+	}
+
+} /* }}} */
+
+static int php_mruby_object_cast(zval *zv, zval *result, int type TSRMLS_DC) /* {{{ */
+{
+	php_mruby_object_t *object = (php_mruby_object_t *)zend_object_store_get_object(zv TSRMLS_CC);
+	mrb_state *mrb = ((php_mruby_t *)zend_object_store_get_object_by_handle(object->owner.handle TSRMLS_CC))->mrb;
+
+	switch (type) {
+		case IS_STRING:
+			{
+				zval *tmp = php_mruby_convert_mrb_value(object->owner, mrb_funcall(mrb, object->value, "to_s", 0));
+				*result = *tmp;
+				if (Z_TYPE_P(result) != IS_STRING) {
+					convert_to_string(result);
+				}
+				efree(tmp);
+			}
+			return SUCCESS;
+		default:
+			INIT_PZVAL(result);
+			Z_TYPE_P(result) = IS_NULL;
+			break;
+	}
+	return FAILURE;
+}
+/* }}} */
+
+static zend_object_handlers php_mruby_object_handlers = { /* {{{ */
+	ZEND_OBJECTS_STORE_HANDLERS,
+	php_mruby_object_property_read,
+	php_mruby_object_property_write,
+	php_mruby_object_dimension_read,
+	php_mruby_object_dimension_write,
+	NULL, /* get_addr - impossible */
+	NULL, /* get */
+	NULL, /* set */
+	php_mruby_object_property_exists,
+	NULL, /* unset_property */
+	NULL, /* has_dimension */
+	NULL, /* unset_dimension */
+	NULL, /* get_properties */
+	NULL, /* get_method */
+	NULL, /* call_method */
+	NULL, /* get_constructor */
+	NULL, /* get_class */
+	NULL, /* get_class_name */
+	php_mruby_object_compare, /* compare_objects */
+	php_mruby_object_cast, /* cast_object */
+	NULL, /* count_elements */
+	NULL  /* debug_info */
+}; /* }}} */
+
+static zend_function_entry php_mruby_object_methods[] = {
+	{NULL, NULL, NULL}
+};
+
+static zend_object_value php_mruby_object_new(zend_class_entry *ce TSRMLS_DC) /* {{{ */
+{
+	zend_object *intern;
+	zend_object_value retval = zend_objects_new(&intern, ce TSRMLS_CC);
+	php_error_docref(NULL TSRMLS_CC, E_ERROR, "%s cannot be instantiated directly", ce->name);
+	return retval;
+} /* }}} */
+
+static php_mruby_object_free_storage(void *_obj TSRMLS_DC)
+{
+	php_mruby_object_t *obj = _obj;
+	zend_object_std_dtor(&obj->zo TSRMLS_CC);
+	zend_objects_store_del_ref_by_handle_ex(obj->owner.handle, obj->owner.handlers TSRMLS_CC);
+	efree(obj);
+}
+
+static zend_object_value php_mruby_object_create(zend_object_value owner, mrb_value value TSRMLS_CC) /* {{{ */
+{
+	zend_object_value retval;
+	php_mruby_object_t *obj = ecalloc(1, sizeof(*obj));
+
+	zend_object_std_init(&obj->zo, mruby_object_class_entry TSRMLS_CC);
+	obj->owner = owner;
+	obj->value = value;
+	zend_objects_store_add_ref_by_handle(owner.handle TSRMLS_CC);
+
+	retval.handle = zend_objects_store_put(obj, 
+		(zend_objects_store_dtor_t)zend_objects_destroy_object,
+		(zend_objects_free_object_storage_t)php_mruby_object_free_storage,
+		NULL TSRMLS_CC);
+	retval.handlers = &php_mruby_object_handlers;
+
+	return retval;
+} /* }}} */
+
+static php_mruby_mruby_object_class_init(TSRMLS_D)
+{
+	zend_class_entry ce;
+	INIT_CLASS_ENTRY(ce, "MRubyObject", php_mruby_object_methods);
+	php_mruby_object_handlers.get_class_entry = std_object_handlers.get_class_entry;
+	php_mruby_object_handlers.get_class_name = std_object_handlers.get_class_name;
+	mruby_object_class_entry = zend_register_internal_class(&ce TSRMLS_CC);
+	mruby_object_class_entry->create_object = php_mruby_object_new;
+}
+
+void php_mruby_init(TSRMLS_D)
+{
+	php_mruby_mruby_class_init(TSRMLS_C);
+	php_mruby_mruby_object_class_init(TSRMLS_C);
+}
+
+/*
+ * vim: noet
+ */
