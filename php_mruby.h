@@ -39,6 +39,6 @@ typedef struct {
 } php_mruby_object_t;
 
 zval *php_mruby_convert_mrb_value(zend_object_value owner, mrb_value argv TSRMLS_DC);
-mrb_value php_mruby_to_mrb_value(mrb_state *mrb, zval *src);
+mrb_value php_mruby_to_mrb_value(mrb_state *mrb, zval *src TSRMLS_DC);
 
 #endif /* PHP_MRUBY_H */
