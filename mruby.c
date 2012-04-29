@@ -32,7 +32,7 @@ static const struct mrb_data_type php_mruby_object_handle_data_type = {
 	"PHPObjectHandle", NULL
 };
 
-static zend_object_value php_mruby_object_create(zend_object_value owner, mrb_value value TSRMLS_CC);
+static zend_object_value php_mruby_object_create(zend_object_value owner, mrb_value value TSRMLS_DC);
 static zend_object_value php_mruby_get_env_backref(mrb_state *state);
 
 /* are we need this here? */
@@ -122,9 +122,9 @@ mrb_value php_mruby_to_mrb_value(mrb_state *mrb, zval *value TSRMLS_DC) /* {{{ *
 				zval *t;
 				zend_hash_get_current_data_ex(h, (void *) &d, &pos);
 				if (key_type == HASH_KEY_IS_STRING) {
-					mrb_hash_set(mrb, tmp, mrb_str_new(mrb, key, key_len), php_mruby_to_mrb_value(mrb, *d TSRMLS_DC));
+					mrb_hash_set(mrb, tmp, mrb_str_new(mrb, key, key_len), php_mruby_to_mrb_value(mrb, *d TSRMLS_CC));
 				} else {
-					mrb_hash_set(mrb, tmp, mrb_fixnum_value(key_index), php_mruby_to_mrb_value(mrb, *d TSRMLS_DC));
+					mrb_hash_set(mrb, tmp, mrb_fixnum_value(key_index), php_mruby_to_mrb_value(mrb, *d TSRMLS_CC));
 				}
 			}
 			return tmp;
@@ -140,7 +140,7 @@ mrb_value php_mruby_to_mrb_value(mrb_state *mrb, zval *value TSRMLS_DC) /* {{{ *
 	/* never get here */
 } /* }}} */
 
-static zval *php_mruby_wrap(zend_object_value php_mrb, mrb_value value TSRMLS_CC) /* {{{ */
+static zval *php_mruby_wrap(zend_object_value php_mrb, mrb_value value TSRMLS_DC) /* {{{ */
 {
 	zval *retval;
 	ALLOC_INIT_ZVAL(retval);
@@ -724,7 +724,7 @@ static int php_mruby_object_cast(zval *zv, zval *result, int type TSRMLS_DC) /* 
 	switch (type) {
 		case IS_STRING:
 			{
-				zval *tmp = php_mruby_convert_mrb_value(object->owner, mrb_funcall(mrb, object->value, "to_s", 0));
+				zval *tmp = php_mruby_convert_mrb_value(object->owner, mrb_funcall(mrb, object->value, "to_s", 0) TSRMLS_CC);
 				*result = *tmp;
 				if (Z_TYPE_P(result) != IS_STRING) {
 					convert_to_string(result);
@@ -786,7 +786,7 @@ static php_mruby_object_free_storage(void *_obj TSRMLS_DC)
 	efree(obj);
 }
 
-static zend_object_value php_mruby_object_create(zend_object_value owner, mrb_value value TSRMLS_CC) /* {{{ */
+static zend_object_value php_mruby_object_create(zend_object_value owner, mrb_value value TSRMLS_DC) /* {{{ */
 {
 	zend_object_value retval;
 	php_mruby_object_t *obj = ecalloc(1, sizeof(*obj));
