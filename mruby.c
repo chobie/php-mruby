@@ -85,7 +85,6 @@ mrb_value php_mruby_to_mrb_value(mrb_state *mrb, zval *value TSRMLS_DC) /* {{{ *
 			for (zend_hash_internal_pointer_reset_ex(h, &pos);
 					(key_type = zend_hash_get_current_key_ex(h, &key, &key_len, &key_index, 0, &pos)) != HASH_KEY_NON_EXISTANT;
 					zend_hash_move_forward_ex(h, &pos)) {
-				zval *t;
 				zend_hash_get_current_data_ex(h, (void *) &d, &pos);
 				if (key_type == HASH_KEY_IS_STRING) {
 					mrb_hash_set(mrb, tmp, mrb_str_new(mrb, key, key_len), php_mruby_to_mrb_value(mrb, *d TSRMLS_CC));
@@ -138,7 +137,6 @@ zval *php_mruby_convert_mrb_value(zend_object_value php_mrb, mrb_value argv TSRM
 		case MRB_TT_ARRAY: {
 			struct RArray *array_ptr;
 			HashTable *hash;
-			char key[25];
 			int i = 0;
 			int length = RARRAY_LEN(argv);
 
@@ -157,14 +155,12 @@ zval *php_mruby_convert_mrb_value(zend_object_value php_mrb, mrb_value argv TSRM
 			struct kh_ht *h = RHASH_H_TBL(argv);
 			khiter_t k;
 			HashTable *hash;
-			int length = RHASH_SIZE(argv);
 
 			ALLOC_INIT_ZVAL(retval);
 			array_init(retval);
 			hash = Z_ARRVAL_P(retval);
 
 			for (k = kh_begin(h); k != kh_end(h); k++) {
-				mrb_value hash_key,hash_value;
 				zval *z_hash_key, *z_hash_val;
 
 				if (!kh_exist(h, k)) {
@@ -388,9 +384,7 @@ ZEND_END_ARG_INFO()
 PHP_METHOD(mruby, assign)
 {
 	mrb_state *mrb;
-	struct mrb_parser_state *p;
 	php_mruby_t *object = NULL;
-	int n = -1;
 	char *name;
 	long name_len = 0;
 	zval *var;
@@ -549,7 +543,6 @@ static zval *php_mruby_object_property_read(zval *zv, zval *member, int type TSR
 static void php_mruby_object_property_write(zval *zv, zval *member, zval *value_zv TSRMLS_DC) /* {{{ */
 {
 	zval member_with_equal;
-	zval *retval;
 	php_mruby_object_t *object = (php_mruby_object_t *)zend_object_store_get_object(zv TSRMLS_CC);
 	mrb_state *mrb = ((php_mruby_t *)zend_object_store_get_object_by_handle(object->owner.handle TSRMLS_CC))->mrb;
 
@@ -606,7 +599,6 @@ static zval *php_mruby_object_dimension_read(zval *zv, zval *offset, int type TS
 static void php_mruby_object_dimension_write(zval *zv, zval *offset, zval *value_zv TSRMLS_DC) /* {{{ */
 {
 	zval offset_with_brackets_and_equal;
-	zval *retval;
 	php_mruby_object_t *object = (php_mruby_object_t *)zend_object_store_get_object(zv TSRMLS_CC);
 	mrb_state *mrb = ((php_mruby_t *)zend_object_store_get_object_by_handle(object->owner.handle TSRMLS_CC))->mrb;
 
@@ -656,8 +648,6 @@ static int php_mruby_object_property_exists(zval *zv, zval *member, int check_em
 
 static int php_mruby_object_compare(zval *lhs_zv, zval *rhs_zv TSRMLS_DC) /* {{{ */
 {
-	int retval;
-	mrb_state *mrb;
 	php_mruby_object_t *lhs = (php_mruby_object_t *)zend_object_store_get_object(lhs_zv TSRMLS_CC);
 	php_mruby_object_t *rhs = (php_mruby_object_t *)zend_object_store_get_object(rhs_zv TSRMLS_CC);
 
