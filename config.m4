@@ -55,6 +55,9 @@ mruby/mrblib/mrblib.c
 
     PHP_ADD_BUILD_DIR([$ext_builddir/mruby])
 
+    CFLAGS=" -Wunused-variable -Wpointer-sign -Wimplicit-function-declaration"
+    PHP_SUBST([CFLAGS])
+
     PHP_ADD_INCLUDE([$ext_srcdir/mruby/include])
     PHP_ADD_INCLUDE([$ext_srcdir/mruby/src])
     PHP_ADD_INCLUDE([$ext_builddir/mruby/include])
