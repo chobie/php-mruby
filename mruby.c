@@ -698,6 +698,33 @@ static int php_mruby_object_compare(zval *lhs_zv, zval *rhs_zv TSRMLS_DC) /* {{{
 
 } /* }}} */
 
+
+static int php_mruby_object_call_method(const char *method, INTERNAL_FUNCTION_PARAMETERS) /* {{{ */
+{
+	zval *retval;
+	php_mruby_object_t *object = (php_mruby_object_t *)zend_object_store_get_object(getThis() TSRMLS_CC);
+	mrb_state *mrb = ((php_mruby_t *)zend_object_store_get_object_by_handle(object->owner.handle TSRMLS_CC))->mrb;
+
+	retval = php_mruby_convert_mrb_value(object->owner, mrb_funcall(mrb, object->value, method, 0) TSRMLS_CC);
+
+	return_value = &retval;
+	zval_ptr_dtor(return_value);
+	return 0;
+} /* }}} */
+
+static union _zend_function* php_mruby_object_get_method(zval **object_ptr, char *method, int method_len, const struct _zend_literal *key TSRMLS_DC) /* {{{ */
+{
+	union _zend_function *zf = NULL;
+	zf = emalloc(sizeof(union _zend_function));
+	
+	zf->type = ZEND_OVERLOADED_FUNCTION;
+	zf->common.function_name = method;
+	zf->common.scope = object_ptr;
+	zf->common.fn_flags = ZEND_ACC_CALL_VIA_HANDLER;
+
+	return zf;
+} /* }}} */
+
 static int php_mruby_object_cast(zval *zv, zval *result, int type TSRMLS_DC) /* {{{ */
 {
 	php_mruby_object_t *object = (php_mruby_object_t *)zend_object_store_get_object(zv TSRMLS_CC);
@@ -737,8 +764,8 @@ static zend_object_handlers php_mruby_object_handlers = { /* {{{ */
 	NULL, /* has_dimension */
 	NULL, /* unset_dimension */
 	NULL, /* get_properties */
-	NULL, /* get_method */
-	NULL, /* call_method */
+	php_mruby_object_get_method, /* get_method */
+	php_mruby_object_call_method, /* call_method */
 	NULL, /* get_constructor */
 	NULL, /* get_class */
 	NULL, /* get_class_name */
