@@ -466,8 +466,7 @@ PHP_METHOD(mruby, evaluateScript)
 
 	{
 		zval *tmp = php_mruby_convert_mrb_value(Z_OBJVAL_P(getThis()), result TSRMLS_CC);
-		*return_value = *tmp;
-		efree(tmp);
+		RETVAL_ZVAL(tmp,0,1);
 	}
 }
 
