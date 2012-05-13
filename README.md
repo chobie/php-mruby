@@ -124,7 +124,7 @@ evalute ruby source.
 ````php
 <?php
 $mrb = new Mruby();
-echo $mrb->evaluateScript('1 + 2'); // should be display 3.
+echo $mrb->evaluateScript('1 + 2'); // should be displayed 3.
 ````
 
 ### PHP mruby modules (experimental)
