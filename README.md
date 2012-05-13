@@ -104,6 +104,29 @@ $mrb = new Mruby();
 $mrb->run('puts "Hello World"');
 ````
 
+
+## \Mruby::evaluateScript(string $source)
+
+### *Description*
+
+evalute ruby source.
+
+### *Parameters*
+
+*source*: ruby source
+
+### *Return Value*
+
+*mixed*: converted mruby value.
+
+### *Example*
+
+````php
+<?php
+$mrb = new Mruby();
+echo $mrb->evaluateScript('1 + 2'); // should be display 3.
+````
+
 ### PHP mruby modules (experimental)
 
 now, you can import PHP module in your mruby instance!
