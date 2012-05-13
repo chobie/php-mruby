@@ -23,6 +23,7 @@
  */
 extern zend_module_entry mruby_module_entry;
 #define phpext_mruby_ptr &mruby_module_entry;
+#define PHP_MRUBY_OUTPUT_ARRAY        0
 
 extern zend_class_entry *mruby_class_entry;
 extern zend_class_entry *mruby_object_class_entry;

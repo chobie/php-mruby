@@ -34,6 +34,7 @@ static const struct mrb_data_type php_mruby_object_handle_data_type = {
 
 static zend_object_value php_mruby_object_create(zend_object_value owner, mrb_value value TSRMLS_DC);
 static zend_object_value php_mruby_get_env_backref(mrb_state *state);
+static int php_mruby_determine_array_type(zval **val TSRMLS_DC);
 
 /* are we need this here? */
 KHASH_INIT(ht, mrb_value, mrb_value, 1, mrb_hash_ht_hash_func, mrb_hash_ht_hash_equal);
@@ -80,16 +81,26 @@ mrb_value php_mruby_to_mrb_value(mrb_state *mrb, zval *value TSRMLS_DC) /* {{{ *
 			h = Z_ARRVAL_P(value);
 			n = zend_hash_num_elements(h);
 
-			tmp = mrb_hash_new(mrb,n);
-			
-			for (zend_hash_internal_pointer_reset_ex(h, &pos);
-					(key_type = zend_hash_get_current_key_ex(h, &key, &key_len, &key_index, 0, &pos)) != HASH_KEY_NON_EXISTANT;
-					zend_hash_move_forward_ex(h, &pos)) {
-				zend_hash_get_current_data_ex(h, (void *) &d, &pos);
-				if (key_type == HASH_KEY_IS_STRING) {
-					mrb_hash_set(mrb, tmp, mrb_str_new(mrb, key, key_len), php_mruby_to_mrb_value(mrb, *d TSRMLS_CC));
-				} else {
-					mrb_hash_set(mrb, tmp, mrb_fixnum_value(key_index), php_mruby_to_mrb_value(mrb, *d TSRMLS_CC));
+			if(php_mruby_determine_array_type(&value TSRMLS_CC) == PHP_MRUBY_OUTPUT_ARRAY) {
+				tmp = mrb_ary_new(mrb);
+				for (zend_hash_internal_pointer_reset_ex(h, &pos);
+						(key_type = zend_hash_get_current_key_ex(h, &key, &key_len, &key_index, 0, &pos)) != HASH_KEY_NON_EXISTANT;
+						zend_hash_move_forward_ex(h, &pos)) {
+					zend_hash_get_current_data_ex(h, (void *) &d, &pos);
+					
+					mrb_ary_push(mrb, tmp, php_mruby_to_mrb_value(mrb, *d TSRMLS_CC));
+				}
+			} else {
+				tmp = mrb_hash_new(mrb,n);
+				for (zend_hash_internal_pointer_reset_ex(h, &pos);
+						(key_type = zend_hash_get_current_key_ex(h, &key, &key_len, &key_index, 0, &pos)) != HASH_KEY_NON_EXISTANT;
+						zend_hash_move_forward_ex(h, &pos)) {
+					zend_hash_get_current_data_ex(h, (void *) &d, &pos);
+					if (key_type == HASH_KEY_IS_STRING) {
+						mrb_hash_set(mrb, tmp, mrb_str_new(mrb, key, key_len), php_mruby_to_mrb_value(mrb, *d TSRMLS_CC));
+					} else {
+						mrb_hash_set(mrb, tmp, mrb_fixnum_value(key_index), php_mruby_to_mrb_value(mrb, *d TSRMLS_CC));
+					}
 				}
 			}
 			return tmp;
@@ -783,6 +794,40 @@ void php_mruby_init(TSRMLS_D)
 {
 	php_mruby_mruby_class_init(TSRMLS_C);
 	php_mruby_mruby_object_class_init(TSRMLS_C);
+}
+
+/* this came from PHP's json.c. 0 means array, 1 means hash */
+static int php_mruby_determine_array_type(zval **val TSRMLS_DC) /* {{{ */
+{
+	int i;
+	HashTable *myht = HASH_OF(*val);
+
+	i = myht ? zend_hash_num_elements(myht) : 0;
+	if (i > 0) {
+		char *key;
+		ulong index, idx;
+		uint key_len;
+		HashPosition pos;
+
+		zend_hash_internal_pointer_reset_ex(myht, &pos);
+		idx = 0;
+		for (;; zend_hash_move_forward_ex(myht, &pos)) {
+			i = zend_hash_get_current_key_ex(myht, &key, &key_len, &index, 0, &pos);
+			if (i == HASH_KEY_NON_EXISTANT)
+				break;
+
+			if (i == HASH_KEY_IS_STRING) {
+				return 1;
+			} else {
+				if (index != idx) {
+					return 1;
+				}
+			}
+			idx++;
+		}
+	}
+
+	return PHP_MRUBY_OUTPUT_ARRAY;
 }
 
 /*
