@@ -22,7 +22,7 @@ echo $mruby->eval(':name');
 echo PHP_EOL;
 
 /* arguments */
-foreach($mruby->eval('ARGV.map{|k,v| v+1}',array(1,2,3)) as $v){
+foreach($mruby->eval('ARGV.map{|v| v+1}',array(1,2,3)) as $v){
   echo $v . PHP_EOL;
 }
 

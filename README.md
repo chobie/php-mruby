@@ -125,7 +125,7 @@ evaluate ruby source.
 ````php
 <?php
 $mrb = new Mruby();
-foreach($mrb->eval("ARGV.map{|k,v| v+1}",[1,2,3]) as $k => $v) {
+foreach($mrb->eval("ARGV.map{|v| v+1}",[1,2,3]) as $k => $v) {
   echo $v . PHP_EOL // should be displayed 2,3,4.
 }
 ````
