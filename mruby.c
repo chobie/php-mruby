@@ -54,10 +54,10 @@ mrb_value php_mruby_to_mrb_value(mrb_state *mrb, zval *value TSRMLS_DC) /* {{{ *
 			return mrb_nil_value();
 
 		case IS_BOOL:
-			return Z_LONG_P(value) ? mrb_true_value(): mrb_false_value();
+			return Z_LVAL_P(value) ? mrb_true_value(): mrb_false_value();
 
 		case IS_LONG:
-			return mrb_fixnum_value(Z_LONG_P(value));
+			return mrb_fixnum_value(Z_LVAL_P(value));
 
 		case IS_DOUBLE:
 			return mrb_float_value(Z_DOUBLE_P(value));
