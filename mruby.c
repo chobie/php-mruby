@@ -698,6 +698,49 @@ static int php_mruby_object_compare(zval *lhs_zv, zval *rhs_zv TSRMLS_DC) /* {{{
 
 } /* }}} */
 
+
+static int php_mruby_object_call_method(const char *method, INTERNAL_FUNCTION_PARAMETERS) /* {{{ */
+{
+	zval *retval;
+	php_mruby_object_t *object = (php_mruby_object_t *)zend_object_store_get_object(getThis() TSRMLS_CC);
+	mrb_state *mrb = ((php_mruby_t *)zend_object_store_get_object_by_handle(object->owner.handle TSRMLS_CC))->mrb;
+	zval ***args;
+	mrb_value argv[16];
+	int argc = 0;
+	int i;
+
+	if (ZEND_NUM_ARGS() > 0) {
+		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "+", &args, &argc) == FAILURE) {
+			return;
+		}
+
+		for (i = 0; i < argc; i++) {
+			argv[i] = php_mruby_to_mrb_value(mrb, *args[i] TSRMLS_CC);
+		}
+		
+		retval = php_mruby_convert_mrb_value(object->owner, mrb_funcall_argv(mrb, object->value, method, argc, argv) TSRMLS_CC);
+		efree(args);
+	} else {
+		retval = php_mruby_convert_mrb_value(object->owner, mrb_funcall(mrb, object->value, method, 0) TSRMLS_CC);
+	}
+
+	RETVAL_ZVAL(retval,0,1);
+	return 0; /* FIXME: is this okay? */
+} /* }}} */
+
+static union _zend_function* php_mruby_object_get_method(zval **object_ptr, char *method, int method_len, const struct _zend_literal *key TSRMLS_DC) /* {{{ */
+{
+	union _zend_function *zf = NULL;
+	zf = ecalloc(1,sizeof(union _zend_function));
+	
+	zf->type = ZEND_OVERLOADED_FUNCTION;
+	zf->common.function_name = method;
+	zf->common.scope = object_ptr;
+	zf->common.fn_flags = ZEND_ACC_CALL_VIA_HANDLER;
+
+	return zf;
+} /* }}} */
+
 static int php_mruby_object_cast(zval *zv, zval *result, int type TSRMLS_DC) /* {{{ */
 {
 	php_mruby_object_t *object = (php_mruby_object_t *)zend_object_store_get_object(zv TSRMLS_CC);
@@ -737,8 +780,8 @@ static zend_object_handlers php_mruby_object_handlers = { /* {{{ */
 	NULL, /* has_dimension */
 	NULL, /* unset_dimension */
 	NULL, /* get_properties */
-	NULL, /* get_method */
-	NULL, /* call_method */
+	php_mruby_object_get_method, /* get_method */
+	php_mruby_object_call_method, /* call_method */
 	NULL, /* get_constructor */
 	NULL, /* get_class */
 	NULL, /* get_class_name */
