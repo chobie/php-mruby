@@ -21,8 +21,16 @@ echo PHP_EOL;
 echo $mruby->eval(':name');
 echo PHP_EOL;
 
+/* arguments */
+foreach($mruby->eval('ARGV.map{|k,v| v+1}',array(1,2,3)) as $v){
+  echo $v . PHP_EOL;
+}
+
 --EXPECT--
 I am you are me.
 3
 3.14159265
 name
+2
+3
+4

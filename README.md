@@ -105,15 +105,16 @@ $mrb->run('puts "Hello World"');
 ````
 
 
-## \Mruby::eval(string $source)
+## \Mruby::eval(string $source[, array $arguments])
 
 ### *Description*
 
-evalute ruby source.
+evaluate ruby source.
 
 ### *Parameters*
 
 *source*: ruby source
+*arguments*: arguments. it can use with ARGV constant.
 
 ### *Return Value*
 
@@ -124,7 +125,9 @@ evalute ruby source.
 ````php
 <?php
 $mrb = new Mruby();
-echo $mrb->evaluateScript('1 + 2'); // should be displayed 3.
+foreach($mrb->eval("ARGV.map{|k,v| v+1}",[1,2,3]) as $k => $v) {
+  echo $v . PHP_EOL // should be displayed 2,3,4.
+}
 ````
 
 ### PHP mruby modules (experimental)

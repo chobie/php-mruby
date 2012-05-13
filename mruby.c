@@ -376,8 +376,9 @@ ZEND_BEGIN_ARG_INFO_EX(arginfo_mruby_run, 0, 0, 1)
 	ZEND_ARG_INFO(0, code)
 ZEND_END_ARG_INFO()
 
-ZEND_BEGIN_ARG_INFO_EX(arginfo_mruby_eval, 0, 0, 1)
+ZEND_BEGIN_ARG_INFO_EX(arginfo_mruby_eval, 0, 0, 2)
 	ZEND_ARG_INFO(0, script)
+	ZEND_ARG_INFO(0, arguments)
 ZEND_END_ARG_INFO()
 
 
@@ -443,17 +444,25 @@ PHP_METHOD(mruby, eval)
 	int n = -1;
 	char *code;
 	long code_len = 0;
+	zval *arguments = NULL;
 	
 	object = (php_mruby_t *) zend_object_store_get_object(getThis() TSRMLS_CC);
 	mrb = object->mrb;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC,"s",&code, &code_len) == FAILURE) {
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC,"s|a",&code, &code_len, &arguments) == FAILURE) {
 		return;
 	}
 
 	p = mrb_parse_string(mrb, code);
 	n = mrb_generate_code(mrb, p->tree);
 	mrb_pool_close(p->pool);
+	
+	if (arguments != NULL) {
+		//mrb_value php_mruby_to_mrb_value(mrb_state *mrb, zval *value TSRMLS_DC) /* {{{ */
+		mrb_value ARGV;
+		ARGV = php_mruby_to_mrb_value(mrb, arguments TSRMLS_CC);
+		mrb_define_global_const(mrb, "ARGV", ARGV);
+	}
 
 	if (n >= 0) {
 		result = mrb_run(mrb, mrb_proc_new(mrb, mrb->irep[n]), mrb_nil_value());
