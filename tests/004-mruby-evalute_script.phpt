@@ -7,18 +7,18 @@ Check for Mruby::evaluateScript
 $mruby = new MRuby();
 
 /* string */
-echo $mruby->evaluateScript('"I" + " am" + " you" + " are" + " me.\n"');
+echo $mruby->eval('"I" + " am" + " you" + " are" + " me.\n"');
 
 /* integer */
-echo $mruby->evaluateScript('1 + 2');
+echo $mruby->eval('1 + 2');
 echo PHP_EOL;
 
 /* float */
-echo $mruby->evaluateScript('3.14159265');
+echo $mruby->eval('3.14159265');
 echo PHP_EOL;
 
 /* symbol (for now, it'll return as a string)*/
-echo $mruby->evaluateScript(':name');
+echo $mruby->eval(':name');
 echo PHP_EOL;
 
 --EXPECT--

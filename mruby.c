@@ -376,7 +376,7 @@ ZEND_BEGIN_ARG_INFO_EX(arginfo_mruby_run, 0, 0, 1)
 	ZEND_ARG_INFO(0, code)
 ZEND_END_ARG_INFO()
 
-ZEND_BEGIN_ARG_INFO_EX(arginfo_mruby_evaluate_script, 0, 0, 1)
+ZEND_BEGIN_ARG_INFO_EX(arginfo_mruby_eval, 0, 0, 1)
 	ZEND_ARG_INFO(0, script)
 ZEND_END_ARG_INFO()
 
@@ -434,7 +434,7 @@ PHP_METHOD(mruby, run)
 }
 
 /* currently, this method does not return correct result */
-PHP_METHOD(mruby, evaluateScript)
+PHP_METHOD(mruby, eval)
 {
 	mrb_state *mrb;
 	struct mrb_parser_state *p;
@@ -502,7 +502,7 @@ static zend_object_value php_mruby_new(zend_class_entry *ce TSRMLS_DC)
 static zend_function_entry php_mruby_methods[] = {
 	PHP_ME(mruby, assign, arginfo_mruby_assign, ZEND_ACC_PUBLIC)
 	PHP_ME(mruby, run, arginfo_mruby_run, ZEND_ACC_PUBLIC)
-	PHP_ME(mruby, evaluateScript, arginfo_mruby_evaluate_script, ZEND_ACC_PUBLIC)
+	PHP_ME(mruby, eval, arginfo_mruby_eval, ZEND_ACC_PUBLIC)
 	{NULL, NULL, NULL}
 };
 

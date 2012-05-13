@@ -105,7 +105,7 @@ $mrb->run('puts "Hello World"');
 ````
 
 
-## \Mruby::evaluateScript(string $source)
+## \Mruby::eval(string $source)
 
 ### *Description*
 
