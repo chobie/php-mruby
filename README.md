@@ -82,7 +82,7 @@ $mrb->run('puts $myname');
 ````
 
 
-## \Mruby::run(string $code)
+## \Mruby::run(string $code[, array $arguments])
 
 ### *Description*
 
@@ -91,6 +91,7 @@ run ruby code with current instance
 ### *Parameters*
 
 *code*: ruby code
+*arguments*: arguments. it can use with ARGV constant.
 
 ### *Return Value*
 
