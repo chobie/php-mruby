@@ -41,6 +41,7 @@ mruby/src/string.c
 mruby/src/struct.c
 mruby/src/symbol.c
 mruby/src/transcode.c
+mruby/src/time.c
 mruby/src/unicode.c
 mruby/src/us_ascii.c
 mruby/src/utf_8.c

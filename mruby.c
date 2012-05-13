@@ -152,7 +152,7 @@ zval *php_mruby_convert_mrb_value(zend_object_value php_mrb, mrb_value argv TSRM
 			break;
 		}
 		case MRB_TT_HASH: {
-			struct kh_ht *h = RHASH_H_TBL(argv);
+			struct kh_ht *h = RHASH_TBL(argv);
 			khiter_t k;
 			HashTable *hash;
 
