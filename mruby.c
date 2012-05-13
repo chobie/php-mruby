@@ -704,18 +704,34 @@ static int php_mruby_object_call_method(const char *method, INTERNAL_FUNCTION_PA
 	zval *retval;
 	php_mruby_object_t *object = (php_mruby_object_t *)zend_object_store_get_object(getThis() TSRMLS_CC);
 	mrb_state *mrb = ((php_mruby_t *)zend_object_store_get_object_by_handle(object->owner.handle TSRMLS_CC))->mrb;
+	zval ***args;
+	mrb_value argv[16];
+	int argc = 0;
+	int i;
 
-	retval = php_mruby_convert_mrb_value(object->owner, mrb_funcall(mrb, object->value, method, 0) TSRMLS_CC);
+	if (ZEND_NUM_ARGS() > 0) {
+		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "+", &args, &argc) == FAILURE) {
+			return;
+		}
 
-	return_value = &retval;
-	zval_ptr_dtor(return_value);
-	return 0;
+		for (i = 0; i < argc; i++) {
+			argv[i] = php_mruby_to_mrb_value(mrb, *args[i] TSRMLS_CC);
+		}
+		
+		retval = php_mruby_convert_mrb_value(object->owner, mrb_funcall_argv(mrb, object->value, method, argc, argv) TSRMLS_CC);
+		efree(args);
+	} else {
+		retval = php_mruby_convert_mrb_value(object->owner, mrb_funcall(mrb, object->value, method, 0) TSRMLS_CC);
+	}
+
+	RETVAL_ZVAL(retval,0,1);
+	return 0; /* FIXME: is this okay? */
 } /* }}} */
 
 static union _zend_function* php_mruby_object_get_method(zval **object_ptr, char *method, int method_len, const struct _zend_literal *key TSRMLS_DC) /* {{{ */
 {
 	union _zend_function *zf = NULL;
-	zf = emalloc(sizeof(union _zend_function));
+	zf = ecalloc(1,sizeof(union _zend_function));
 	
 	zf->type = ZEND_OVERLOADED_FUNCTION;
 	zf->common.function_name = method;
