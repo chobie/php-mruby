@@ -21,7 +21,7 @@ mruby/src/init.c
 mruby/src/init_ext.c
 mruby/src/kernel.c
 mruby/src/load.c
-mruby/src/minimain.c
+mruby/src/math.c
 mruby/src/numeric.c
 mruby/src/object.c
 mruby/src/pool.c
@@ -40,13 +40,12 @@ mruby/src/state.c
 mruby/src/string.c
 mruby/src/struct.c
 mruby/src/symbol.c
-mruby/src/transcode.c
 mruby/src/time.c
+mruby/src/transcode.c
 mruby/src/unicode.c
 mruby/src/us_ascii.c
 mruby/src/utf_8.c
 mruby/src/variable.c
-mruby/src/version.c
 mruby/src/vm.c
 mruby/src/y.tab.c
 mruby/mrblib/mrblib.c

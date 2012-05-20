@@ -12,7 +12,7 @@
 #include "php.h"
 #include "mruby.h"
 #include "mruby/proc.h"
-#include "mruby/src/compile.h"
+#include "mruby/compile.h"
 #include "mruby/dump.h"
 
 #include "ext/spl/spl_exceptions.h"
