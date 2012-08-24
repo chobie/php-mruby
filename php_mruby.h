@@ -16,13 +16,14 @@
 #include "mruby/dump.h"
 
 #include "ext/spl/spl_exceptions.h"
+#include "zend_exceptions.h"
 #include "zend_interfaces.h"
 
 /* Define the entry point symbol
  * Zend will use when loading this module
  */
 extern zend_module_entry mruby_module_entry;
-#define phpext_mruby_ptr &mruby_module_entry;
+#define phpext_mruby_ptr &mruby_module_entry
 #define PHP_MRUBY_OUTPUT_ARRAY        0
 
 extern zend_class_entry *mruby_class_entry;
